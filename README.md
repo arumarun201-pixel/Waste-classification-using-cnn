@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Waste Classification Using CNN
 
 A CNN-based deep learning project that classifies waste images into:
@@ -43,3 +44,6 @@ Python, TensorFlow, Keras, CNN, NumPy, Matplotlib, Scikit-learn, Flask, HTML, CS
 ## Important
 
 The ZIP contains the project code and empty dataset/model folders. You must add your own training images and run `python train.py` before using the prediction website.
+=======
+# Waste-classification-using-cnn
+>>>>>>> 324f58838b65f7506e6f12ec90c321228d38efe6
