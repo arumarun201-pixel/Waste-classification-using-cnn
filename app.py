@@ -1,64 +1,101 @@
-import os
-import json
+from flask import Flask, request, jsonify, send_from_directory
+from PIL import Image
 import numpy as np
-import tensorflow as tf
-from flask import Flask, render_template, request
-from werkzeug.utils import secure_filename
-from tensorflow.keras.preprocessing import image
+import onnxruntime as ort
+import os
 
 app = Flask(__name__)
 
-UPLOAD_FOLDER = "uploads"
-MODEL_PATH = "models/waste_classifier.keras"
-CLASS_PATH = "models/class_names.json"
-IMG_SIZE = 128
+MODEL_PATH = os.path.join("models", "waste_classifier.onnx")
 
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+CLASS_NAMES = [
+    "cardboard",
+    "glass",
+    "metal",
+    "paper",
+    "plastic",
+    "trash"
+]
 
-model = tf.keras.models.load_model(MODEL_PATH)
+# Load model once
+session = ort.InferenceSession(
+    MODEL_PATH,
+    providers=["CPUExecutionProvider"]
+)
 
-with open(CLASS_PATH, "r", encoding="utf-8") as f:
-    CLASS_NAMES = json.load(f)
+input_name = session.get_inputs()[0].name
 
-def predict_waste(image_path):
-    img = image.load_img(image_path, target_size=(IMG_SIZE, IMG_SIZE))
-    img_array = image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0) / 255.0
 
-    predictions = model.predict(img_array, verbose=0)
-    index = int(np.argmax(predictions[0]))
-    predicted_class = CLASS_NAMES[index]
-    confidence = float(predictions[0][index]) * 100
-    return predicted_class, confidence
+def preprocess_image(image):
+    image = image.convert("RGB")
+    image = image.resize((224, 224))
+
+    image = np.array(image).astype(np.float32)
+
+    # If your CNN was trained with /255 normalization
+    image = image / 255.0
+
+    image = np.expand_dims(image, axis=0)
+
+    return image
+
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return send_from_directory(".", "index.html")
+
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    if "file" not in request.files:
-        return render_template("index.html", error="Please select an image.")
 
-    file = request.files["file"]
-    if file.filename == "":
-        return render_template("index.html", error="Please select an image.")
+    if "image" not in request.files:
+        return jsonify({
+            "error": "No image uploaded"
+        }), 400
 
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-    file.save(file_path)
+    file = request.files["image"]
 
     try:
-        predicted_class, confidence = predict_waste(file_path)
-    except Exception as e:
-        return render_template("index.html", error=f"Prediction error: {e}")
+        image = Image.open(file.stream)
 
-    return render_template(
-        "index.html",
-        prediction=predicted_class,
-        confidence=f"{confidence:.2f}"
-    )
+        processed = preprocess_image(image)
+
+        output = session.run(
+            None,
+            {input_name: processed}
+        )
+
+        predictions = output[0][0]
+
+        class_index = int(np.argmax(predictions))
+
+        confidence = float(predictions[class_index])
+
+        # If model output is logits, convert to probabilities
+        if confidence > 1:
+            exp_values = np.exp(
+                predictions - np.max(predictions)
+            )
+            probabilities = exp_values / np.sum(exp_values)
+            confidence = float(probabilities[class_index])
+
+        prediction = CLASS_NAMES[class_index]
+
+        return jsonify({
+            "prediction": prediction,
+            "confidence": round(confidence * 100, 2)
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=False
+    )
