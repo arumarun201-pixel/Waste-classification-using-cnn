@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waste Classification using CNN</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h1>Waste Classification</h1>
+    <p class="subtitle">CNN Based Waste Classification System</p>
+
+    <form action="/predict" method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/*" required>
+        <button type="submit">Classify Waste</button>
+    </form>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    {% if prediction %}
+    <div class="result">
+        <h2>Prediction Result</h2>
+        <p>Waste Type: <strong>{{ prediction }}</strong></p>
+        <p>Confidence: <strong>{{ confidence }}%</strong></p>
+    </div>
+    {% endif %}
+</div>
+</body>
+</html>
